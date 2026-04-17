@@ -19,6 +19,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/src/imgui/imgui
     ${PROJECT_SOURCE_DIR}/src/imgui/dcimgui
     ${PROJECT_SOURCE_DIR}/src/sdk
+    ${PROJECT_SOURCE_DIR}/src/platform/video/opengl/glad
 )
 
 # ======================================
@@ -63,11 +64,13 @@ else()
         GEKKONET_NO_ASIO
 
         CRS_APP_DRIVER_SDL
-        CRS_VIDEO_DRIVER_SDL
+        CRS_VIDEO_DRIVER_OPENGL
 
         ARCADE_ROM
         SOUND_ENABLED
         IMGUI
+
+        GL_SILENCE_DEPRECATION
     )
 endif()
 
@@ -145,7 +148,9 @@ endif()
 # ======================================
 
 set(THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/third_party")
+
 find_package(ZLIB REQUIRED)
+find_package(OpenGL REQUIRED)
 
 set(FFMPEG_ROOT        "${THIRD_PARTY_DIR}/ffmpeg/build")
 set(SDL3_ROOT          "${THIRD_PARTY_DIR}/sdl3/build")
@@ -192,6 +197,7 @@ else()
         "${MINIZIP_NG_ROOT}/lib/libminizip-ng.a"
         "${TF_PSA_CRYPTO_ROOT}/lib/libtfpsacrypto.a"
         ZLIB::ZLIB
+        OpenGL::GL
         stdc++ # For GekkoNet
     )
 endif()
@@ -241,6 +247,8 @@ set(PROJECT_LICENSE_FILES
     "${CMAKE_SOURCE_DIR}/THIRD_PARTY_NOTICES.txt"
 )
 
+file(GLOB_RECURSE OPENGL_SHADERS "${CMAKE_SOURCE_DIR}/src/platform/video/opengl/shaders/*.glsl")
+
 if(APPLE)
     install(TARGETS 3sx
         RUNTIME DESTINATION bin
@@ -258,6 +266,11 @@ if(APPLE)
     install(FILES
         ${PROJECT_LICENSE_FILES}
         DESTINATION 3SX.app/Contents/Resources/licenses
+    )
+
+    install(FILES
+        ${OPENGL_SHADERS}
+        DESTINATION 3SX.app/Contents/Resources/shaders
     )
 elseif(WIN32)
     install(TARGETS 3sx
