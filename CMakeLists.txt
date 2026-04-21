@@ -64,7 +64,7 @@ else()
         GEKKONET_NO_ASIO
 
         CRS_APP_DRIVER_SDL
-        CRS_VIDEO_DRIVER_OPENGL
+        CRS_VIDEO_DRIVER_SDL_GPU
 
         ARCADE_ROM
         SOUND_ENABLED
@@ -247,8 +247,6 @@ set(PROJECT_LICENSE_FILES
     "${CMAKE_SOURCE_DIR}/THIRD_PARTY_NOTICES.txt"
 )
 
-file(GLOB_RECURSE OPENGL_SHADERS "${CMAKE_SOURCE_DIR}/src/platform/video/opengl/shaders/*.glsl")
-
 if(APPLE)
     install(TARGETS 3sx
         RUNTIME DESTINATION bin
@@ -268,8 +266,7 @@ if(APPLE)
         DESTINATION 3SX.app/Contents/Resources/licenses
     )
 
-    install(FILES
-        ${OPENGL_SHADERS}
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/src/platform/video/sdl_gpu/shaders/compiled"
         DESTINATION 3SX.app/Contents/Resources/shaders
     )
 elseif(WIN32)
@@ -301,8 +298,7 @@ elseif(WIN32)
         DESTINATION bin/licenses
     )
 
-    install(FILES
-        ${OPENGL_SHADERS}
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/src/platform/video/sdl_gpu/shaders/compiled"
         DESTINATION bin/shaders
     )
 elseif(UNIX)
@@ -324,8 +320,7 @@ elseif(UNIX)
         DESTINATION share/3sx/licenses
     )
 
-    install(FILES
-        ${OPENGL_SHADERS}
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/src/platform/video/sdl_gpu/shaders/compiled"
         DESTINATION bin/shaders
     )
 endif()

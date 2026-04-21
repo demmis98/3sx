@@ -4,7 +4,6 @@
 #include "arcade/arcade_balance.h"
 #include "common.h"
 #include "main.h"
-#include "platform/video/opengl/opengl_renderer.h"
 #include "port/config/config.h"
 #include "port/config/keymap.h"
 #include "port/input_backend.h"
@@ -12,6 +11,10 @@
 #include "port/sdl/sdl_message_renderer.h"
 #include "port/sound/adx.h"
 #include "sf33rd/AcrSDK/ps2/foundaps2.h"
+
+#if CRS_VIDEO_DRIVER_SDL_GPU
+#include "platform/video/sdl_gpu/sdl_gpu_renderer.h"
+#endif
 
 #if NETPLAY_ENABLED
 #include "port/sdl/netplay_screen.h"
@@ -29,7 +32,6 @@
 #include "port/io/afs.h"
 #include "port/resources.h"
 
-#include "glad.h"
 #include <SDL3/SDL.h>
 
 #if _WIN32 && DEBUG
@@ -40,8 +42,6 @@
 
 typedef enum ScaleMode {
     SCALEMODE_NEAREST,
-    SCALEMODE_LINEAR,
-    SCALEMODE_SOFT_LINEAR,
     SCALEMODE_SQUARE_PIXELS,
     SCALEMODE_INTEGER,
 } ScaleMode;
@@ -60,9 +60,8 @@ static const int window_min_width = 384;
 static const int window_min_height = (int)(window_min_width / display_target_ratio);
 static const Uint64 target_frame_time_ns = 1000000000.0 / TARGET_FPS;
 
-SDL_Window* window = NULL;
-static SDL_GLContext* gl_context = NULL;
-static ScaleMode scale_mode = SCALEMODE_SOFT_LINEAR;
+static SDL_Window* window = NULL;
+static ScaleMode scale_mode = SCALEMODE_NEAREST;
 
 static Uint64 frame_deadline = 0;
 static FrameMetrics frame_metrics = { 0 };
@@ -70,6 +69,10 @@ static Uint64 last_frame_end_time = 0;
 
 static Uint64 last_mouse_motion_time = 0;
 static const int mouse_hide_delay_ms = 2000; // 2 seconds
+
+#if CRS_VIDEO_DRIVER_SDL_GPU
+static SDLGPURendererContext gpu_renderer_context = { 0 };
+#endif
 
 static void init_scalemode() {
     const char* raw_scalemode = Config_GetString(CFG_KEY_SCALEMODE);
@@ -80,10 +83,6 @@ static void init_scalemode() {
 
     if (SDL_strcmp(raw_scalemode, "nearest") == 0) {
         scale_mode = SCALEMODE_NEAREST;
-    } else if (SDL_strcmp(raw_scalemode, "linear") == 0) {
-        scale_mode = SCALEMODE_LINEAR;
-    } else if (SDL_strcmp(raw_scalemode, "soft-linear") == 0) {
-        scale_mode = SCALEMODE_SOFT_LINEAR;
     } else if (SDL_strcmp(raw_scalemode, "square-pixels") == 0) {
         scale_mode = SCALEMODE_SQUARE_PIXELS;
     } else if (SDL_strcmp(raw_scalemode, "integer") == 0) {
@@ -91,26 +90,8 @@ static void init_scalemode() {
     }
 }
 
-static bool scalemode_uses_nearest_filter() {
-    switch (scale_mode) {
-    case SCALEMODE_INTEGER:
-    case SCALEMODE_NEAREST:
-    case SCALEMODE_SQUARE_PIXELS:
-        return true;
-
-    case SCALEMODE_LINEAR:
-    case SCALEMODE_SOFT_LINEAR:
-        return false;
-    }
-}
-
 static bool init_window() {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-
-    SDL_WindowFlags window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    SDL_WindowFlags window_flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
     if (Config_GetBool(CFG_KEY_FULLSCREEN)) {
         window_flags |= SDL_WINDOW_FULLSCREEN;
@@ -129,19 +110,35 @@ static bool init_window() {
         return false;
     }
 
-    gl_context = SDL_GL_CreateContext(window);
+#if CRS_VIDEO_DRIVER_SDL_GPU
+    gpu_renderer_context.window = window;
 
-    if (gl_context == NULL) {
-        SDL_Log("Couldn't create GL context: %s", SDL_GetError());
+    gpu_renderer_context.device = SDL_CreateGPUDevice(
+        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL, false, NULL
+    );
+
+    if (gpu_renderer_context.device == NULL) {
+        SDL_Log("Failed to create GPU device: %s", SDL_GetError());
         return false;
     }
 
-    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
-        SDL_Log("Failed to log OpenGL functions");
-        return false;
+    SDL_ClaimWindowForGPUDevice(gpu_renderer_context.device, window);
+
+    if (SDL_WindowSupportsGPUPresentMode(gpu_renderer_context.device, window, SDL_GPU_PRESENTMODE_MAILBOX)) {
+        gpu_renderer_context.present_mode = SDL_GPU_PRESENTMODE_MAILBOX;
+        SDL_Log("Using MAILBOX present mode");
+    } else {
+        gpu_renderer_context.present_mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
+        SDL_Log("Using IMMEDIATE present mode");
     }
 
-    SDL_GL_SetSwapInterval(0); // No vsync
+    if (!SDL_SetGPUSwapchainParameters(
+            gpu_renderer_context.device, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, gpu_renderer_context.present_mode
+        )) {
+        SDL_Log("Failed to set GPU swapchain parameters: %s", SDL_GetError());
+        return false;
+    }
+#endif
 
     return true;
 }
@@ -189,11 +186,12 @@ static int full_init() {
 
     // Initialize rendering subsystems
 
-    const int scale = (scale_mode == SCALEMODE_SOFT_LINEAR) ? 2 : 1;
-
-    if (!OpenGLRenderer_Init(scalemode_uses_nearest_filter(), scale)) {
+#if CRS_VIDEO_DRIVER_SDL_GPU
+    if (!SDLGPURenderer_Init(&gpu_renderer_context)) {
+        SDL_Log("Couldn't initialize SDL GPU renderer: %s", SDL_GetError());
         return 1;
     }
+#endif
 
     // #if DEBUG
     //     SDLDebugText_Initialize(renderer);
@@ -201,10 +199,6 @@ static int full_init() {
 
     // Initialize pads
     InputBackend_Init();
-
-#if DEBUG && IMGUI
-    ImGuiW_Init(window, gl_context);
-#endif
 
 #if _WIN32 && DEBUG
     init_windows_console();
@@ -224,14 +218,13 @@ static int full_init() {
 static void cleanup() {
     AFS_Finish();
     Config_Destroy();
-    OpenGLRenderer_Quit();
 
-#if DEBUG && IMGUI
-    ImGuiW_Finish();
+#if CRS_VIDEO_DRIVER_SDL_GPU
+    SDLGPURenderer_Quit(&gpu_renderer_context);
+    SDL_DestroyGPUDevice(gpu_renderer_context.device);
 #endif
 
     SDL_DestroyWindow(window);
-    window = NULL;
 }
 
 #if DEBUG && IMGUI
@@ -290,7 +283,7 @@ static bool poll_events() {
 
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
-#if DEBUG
+#if DEBUG && IMGUI
             toggle_debug_window_visibility(&event.key);
 #endif
 
@@ -316,7 +309,7 @@ static bool poll_events() {
 
 static void begin_frame() {
 #if DEBUG && IMGUI
-    ImGuiW_BeginFrame();
+    ImGuiW_NewFrame();
 #endif
 
     AFS_RunServer();
@@ -363,8 +356,6 @@ static SDL_Rect fit_integer_rect(int win_w, int win_h, int pixel_w, int pixel_h)
 static SDL_Rect get_letterbox_rect(int win_w, int win_h) {
     switch (scale_mode) {
     case SCALEMODE_NEAREST:
-    case SCALEMODE_LINEAR:
-    case SCALEMODE_SOFT_LINEAR:
         return fit_4_by_3_rect(win_w, win_h);
 
     case SCALEMODE_INTEGER:
@@ -413,13 +404,10 @@ static void end_frame() {
     int window_width;
     int window_height;
     SDL_GetWindowSizeInPixels(window, &window_width, &window_height);
-    OpenGLRenderer_RenderFrame(get_letterbox_rect(window_width, window_height));
 
-#if DEBUG && IMGUI
-    ImGuiW_EndFrame();
+#if CRS_VIDEO_DRIVER_SDL_GPU
+    SDLGPURenderer_RenderFrame(&gpu_renderer_context, get_letterbox_rect(window_width, window_height));
 #endif
-
-    SDL_GL_SwapWindow(window);
 
     // Handle cursor hiding
     hide_cursor_if_needed();
@@ -474,7 +462,13 @@ static int loop() {
             pre_init();
 
             if (Resources_Check()) {
-                full_init();
+                const int init_status = full_init();
+
+                if (init_status != 0) {
+                    is_running = false;
+                    break;
+                }
+
                 phase = APP_PHASE_INITIALIZED;
             } else {
                 phase = APP_PHASE_COPYING_RESOURCES;
@@ -494,7 +488,13 @@ static int loop() {
             const bool resource_flow_ended = Resources_RunResourceCopyingFlow();
 
             if (resource_flow_ended) {
-                full_init();
+                const int init_status = full_init();
+
+                if (init_status != 0) {
+                    is_running = false;
+                    break;
+                }
+
                 phase = APP_PHASE_INITIALIZED;
             }
 
