@@ -1,11 +1,11 @@
-#ifndef SDL_PAD_H
-#define SDL_PAD_H
-
-#include <SDL3/SDL.h>
+#ifndef CORE_INPUT_H
+#define CORE_INPUT_H
 
 #include <stdbool.h>
 
-typedef struct SDLPad_ButtonState {
+#include <SDL3/SDL.h>
+
+typedef struct Input_ButtonState {
     bool south;
     bool east;
     bool west;
@@ -26,12 +26,10 @@ typedef struct SDLPad_ButtonState {
     Sint16 left_stick_y;
     Sint16 right_stick_x;
     Sint16 right_stick_y;
-} SDLPad_ButtonState;
+} Input_ButtonState;
 
-void SDLPad_Init();
-void SDLPad_HandleGamepadDeviceEvent(SDL_GamepadDeviceEvent* event);
-bool SDLPad_IsGamepadConnected(int id);
-void SDLPad_GetButtonState(int id, SDLPad_ButtonState* state);
-void SDLPad_RumblePad(int id, bool low_freq_enabled, Uint8 high_freq_rumble);
+bool Input_IsGamepadConnected(int id);
+void Input_GetButtonState(int id, Input_ButtonState* state);
+void Input_RumblePad(int id, bool low_freq_enabled, Uint8 high_freq_rumble);
 
 #endif
