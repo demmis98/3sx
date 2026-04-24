@@ -118,11 +118,10 @@ static unsigned int ps2_to_psp_format(int ps2_format) {
 }
 
 static void setup_full_screen_scissor(bool full_screen_scissor) {
-    if(full_screen_scissor != full_screen_scissor_enabled){
-        if(full_screen_scissor){
+    if (full_screen_scissor != full_screen_scissor_enabled) {
+        if (full_screen_scissor) {
             sceGuScissor(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        }
-        else {
+        } else {
             sceGuScissor(DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_AREA_WIDTH, DISPLAY_AREA_HEIGHT);
         }
         full_screen_scissor_enabled = full_screen_scissor;
@@ -130,7 +129,7 @@ static void setup_full_screen_scissor(bool full_screen_scissor) {
 }
 
 static void setup_draw_textured(bool textured) {
-    if(textured != textured_enabled){
+    if (textured != textured_enabled) {
         if (textured) {
             sceGuEnable(GU_TEXTURE_2D);
         } else {
@@ -162,11 +161,13 @@ static void draw_textured_quad(const Sprite* sprite, unsigned int color) {
     fill_textured_vertices(vertices, sprite, color);
     setup_draw_textured(true);
     sceGuDrawArray(
-        GU_TRIANGLE_STRIP, GU_TEXTURE_16BIT | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D, 4, 0, vertices);
+        GU_TRIANGLE_STRIP, GU_TEXTURE_16BIT | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D, 4, 0, vertices
+    );
 }
 
-static void draw_textured_sprite_rect(float x0, float y0, float z0, float s0, float t0, float x1, float y1, float s1,
-                                      float t1, unsigned int color) {
+static void draw_textured_sprite_rect(
+    float x0, float y0, float z0, float s0, float t0, float x1, float y1, float s1, float t1, unsigned int color
+) {
     const FLTexture* texture = current_texture();
     const float texture_width = (float)texture->width;
     const float texture_height = (float)texture->height;
@@ -346,12 +347,12 @@ void PSPRenderer_EndFrame() {
 
 void PSPRenderer_CreateTexture(unsigned int th) {
     const unsigned int texture_handle = LO_16_BITS(th);
-    FLTexture *flTex;
+    FLTexture* flTex;
 
     if ((texture_handle == 0) || (texture_handle > FL_TEXTURE_MAX)) {
         fatal_error("Invalid PSP texture handle: %u", texture_handle);
     }
-    
+
     flTex = &flTexture[texture_handle - 1];
 
     flTex->format = ps2_to_psp_format(flTex->format);
@@ -414,29 +415,33 @@ void PSPRenderer_DrawTexturedQuad(const Sprite* sprite, unsigned int color) {
 }
 
 void PSPRenderer_DrawSprite(const Sprite* sprite, unsigned int color) {
-    draw_textured_sprite_rect(sprite->v[0].x,
-                              sprite->v[0].y,
-                              sprite->v[0].z,
-                              sprite->t[0].s,
-                              sprite->t[0].t,
-                              sprite->v[3].x,
-                              sprite->v[3].y,
-                              sprite->t[3].s,
-                              sprite->t[3].t,
-                              color);
+    draw_textured_sprite_rect(
+        sprite->v[0].x,
+        sprite->v[0].y,
+        sprite->v[0].z,
+        sprite->t[0].s,
+        sprite->t[0].t,
+        sprite->v[3].x,
+        sprite->v[3].y,
+        sprite->t[3].s,
+        sprite->t[3].t,
+        color
+    );
 }
 
 void PSPRenderer_DrawSprite2(const Sprite2* sprite2) {
-    draw_textured_sprite_rect(sprite2->v[0].x,
-                              sprite2->v[0].y,
-                              sprite2->v[0].z,
-                              sprite2->t[0].s,
-                              sprite2->t[0].t,
-                              sprite2->v[1].x,
-                              sprite2->v[1].y,
-                              sprite2->t[1].s,
-                              sprite2->t[1].t,
-                              sprite2->vertex_color);
+    draw_textured_sprite_rect(
+        sprite2->v[0].x,
+        sprite2->v[0].y,
+        sprite2->v[0].z,
+        sprite2->t[0].s,
+        sprite2->t[0].t,
+        sprite2->v[1].x,
+        sprite2->v[1].y,
+        sprite2->t[1].s,
+        sprite2->t[1].t,
+        sprite2->vertex_color
+    );
 }
 
 void PSPRenderer_DrawSolidQuad(const Quad* quad, unsigned int color) {
