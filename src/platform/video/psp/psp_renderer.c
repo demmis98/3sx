@@ -118,26 +118,29 @@ static unsigned int ps2_to_psp_format(int ps2_format) {
 }
 
 static void setup_full_screen_scissor(bool full_screen_scissor) {
-    if (full_screen_scissor != full_screen_scissor_enabled) {
-        if (full_screen_scissor) {
-            sceGuScissor(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        } else {
-            sceGuScissor(DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_AREA_WIDTH, DISPLAY_AREA_HEIGHT);
-        }
-        full_screen_scissor_enabled = full_screen_scissor;
+    if (full_screen_scissor == full_screen_scissor_enabled) {
+        return;
     }
+
+    if (full_screen_scissor) {
+        sceGuScissor(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    } else {
+        sceGuScissor(DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_AREA_WIDTH, DISPLAY_AREA_HEIGHT);
+    }
+    full_screen_scissor_enabled = full_screen_scissor;
 }
 
 static void setup_draw_textured(bool textured) {
-    if (textured != textured_enabled) {
-        if (textured) {
-            sceGuEnable(GU_TEXTURE_2D);
-        } else {
-            sceGuDisable(GU_TEXTURE_2D);
-        }
-        setup_full_screen_scissor(false);
-        textured_enabled = textured;
+    if (textured == textured_enabled) {
+        return;
     }
+
+    if (textured) {
+        sceGuEnable(GU_TEXTURE_2D);
+    } else {
+        sceGuDisable(GU_TEXTURE_2D);
+    }
+    textured_enabled = textured;
 }
 
 static void fill_textured_vertices(PSPVertex* vertices, const Sprite* sprite, unsigned int color) {
@@ -159,6 +162,7 @@ static void draw_textured_quad(const Sprite* sprite, unsigned int color) {
     PSPVertex* vertices = sceGuGetMemory(4 * sizeof(PSPVertex));
 
     fill_textured_vertices(vertices, sprite, color);
+    setup_full_screen_scissor(false);
     setup_draw_textured(true);
     sceGuDrawArray(
         GU_TRIANGLE_STRIP, GU_TEXTURE_16BIT | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D, 4, 0, vertices
@@ -188,6 +192,7 @@ static void draw_textured_sprite_rect(
     vertices[1].y = snap_screen_coord(game_to_screen_y(y1));
     vertices[1].z = flPS2ConvScreenFZ(z0);
 
+    setup_full_screen_scissor(false);
     setup_draw_textured(true);
     sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D, 2, 0, vertices);
 }
