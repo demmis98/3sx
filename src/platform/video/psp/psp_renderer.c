@@ -357,10 +357,6 @@ void PSPRenderer_CreateTexture(unsigned int th) {
     if ((texture_handle == 0) || (texture_handle > FL_TEXTURE_MAX)) {
         fatal_error("Invalid PSP texture handle: %u", texture_handle);
     }
-
-    flTex = &flTexture[texture_handle - 1];
-
-    flTex->format = ps2_to_psp_format(flTex->format);
 }
 
 void PSPRenderer_DestroyTexture(unsigned int texture_handle) {
@@ -398,7 +394,9 @@ void PSPRenderer_SetTexture(unsigned int th) {
     void* texture_source = get_source_pixels(flTex);
     void* palette_source = get_source_pixels(flPal);
 
-    bool is_indexed = flTex->format == GU_PSM_T4 || flTex->format == GU_PSM_T8;
+    unsigned int tex_format = ps2_to_psp_format(flTex->format);
+
+    bool is_indexed = tex_format == GU_PSM_T4 || tex_format == GU_PSM_T8;
 
     if (current_palette_source != palette_source && is_indexed) {
         sceGuClutMode(GU_PSM_5551, 0, 255, 0);
@@ -407,7 +405,7 @@ void PSPRenderer_SetTexture(unsigned int th) {
     }
 
     if (current_texture_source != texture_source) {
-        sceGuTexMode(flTex->format, 0, 0, GU_FALSE);
+        sceGuTexMode(tex_format, 0, 0, GU_FALSE);
         sceGuTexImage(0, flTex->width, flTex->height, flTex->width, texture_source);
         current_texture_source = texture_source;
     }
